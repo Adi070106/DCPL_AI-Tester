@@ -4,7 +4,7 @@ services:
     env: docker
     plan: free
     dockerContext: backend
-    dockerfilePath: Dockerfile
+    dockerfilePath: backend/Dockerfile
     envVars:
       - key: JWT_SECRET
         value: super_secret_key_for_website_qa_tester_2026
