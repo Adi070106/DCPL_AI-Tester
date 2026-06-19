@@ -1,0 +1,101 @@
+@import "tailwindcss";
+
+:root {
+  --brand-bg: #0b0f19;
+  --brand-card: #151c2c;
+  --brand-card-hover: #1e2638;
+  --brand-input: #1b2234;
+  --brand-border: #242f47;
+  
+  --slate-950: #0b0f19;
+  --slate-900: #0f172a;
+  --slate-800: #1e293b;
+  --slate-700: #334155;
+  --slate-600: #475569;
+  --slate-500: #64748b;
+  --slate-400: #94a3b8;
+  --slate-300: #cbd5e1;
+  --slate-200: #e2e8f0;
+  --slate-100: #f1f5f9;
+}
+
+[data-theme='light'] {
+  --brand-bg: #f8fafc;
+  --brand-card: #ffffff;
+  --brand-card-hover: #f1f5f9;
+  --brand-input: #ffffff;
+  --brand-border: #e2e8f0;
+  
+  --slate-950: #f8fafc;
+  --slate-900: #f1f5f9;
+  --slate-800: #cbd5e1;
+  --slate-700: #cbd5e1;
+  --slate-600: #94a3b8;
+  --slate-500: #64748b;
+  --slate-400: #475569;
+  --slate-300: #334155;
+  --slate-200: #1e293b;
+  --slate-100: #0f172a;
+}
+
+@theme {
+  --color-brand-bg: var(--brand-bg);
+  --color-brand-card: var(--brand-card);
+  --color-brand-card-hover: var(--brand-card-hover);
+  --color-brand-input: var(--brand-input);
+  --color-brand-border: var(--brand-border);
+  --color-brand-primary: #6366f1;
+  --color-brand-primary-hover: #4f46e5;
+  
+  --color-severity-critical: #f43f5e;
+  --color-severity-high: #f97316;
+  --color-severity-medium: #eab308;
+  --color-severity-low: #3b82f6;
+  --color-severity-success: #10b981;
+
+  --color-slate-950: var(--slate-950);
+  --color-slate-900: var(--slate-900);
+  --color-slate-800: var(--slate-800);
+  --color-slate-700: var(--slate-700);
+  --color-slate-600: var(--slate-600);
+  --color-slate-500: var(--slate-500);
+  --color-slate-400: var(--slate-400);
+  --color-slate-300: var(--slate-300);
+  --color-slate-200: var(--slate-200);
+  --color-slate-100: var(--slate-100);
+}
+
+/* Custom Scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--brand-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--brand-border);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--slate-600);
+}
+
+/* Global Reset/Overrides for body if needed */
+body {
+  background-color: var(--brand-bg);
+  color: var(--slate-100);
+  font-family: var(--font-sans), system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  overflow-x: hidden;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Micro-animations and Helpers */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
