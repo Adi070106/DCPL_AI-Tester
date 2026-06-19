@@ -46,6 +46,20 @@ def calculate_health_scores(findings_list: list, total_pages: int = 1, selected_
         "footer": 100.0,
     }
     
+    # Check if page failed to load entirely
+    page_load_failed = any(f.get("issue_code") == "TECH_PAGE_LOAD_FAILED" for f in findings_list)
+    
+    if page_load_failed:
+        # If the page failed to load, set all categories (except navigation) to -1 (N/A)
+        # Navigation gets 0 because it's a critical navigation failure
+        for cat in categories:
+            if cat == "navigation":
+                categories[cat] = 0
+            else:
+                categories[cat] = -1
+        categories["overall"] = -1
+        return categories
+
     # Severity deduction weights
     deductions = {
         "CRITICAL": 25.0,
