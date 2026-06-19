@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: dcpl-ai-tester-api
+    env: docker
+    plan: free
+    dockerContext: backend
+    dockerfilePath: Dockerfile
+    envVars:
+      - key: JWT_SECRET
+        value: super_secret_key_for_website_qa_tester_2026
+      - key: CORS_ORIGINS
+        value: http://localhost:3000

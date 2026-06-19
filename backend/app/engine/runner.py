@@ -214,7 +214,7 @@ def execute_audit(job_id: int):
         
         with sync_playwright() as p:
             # Run headless
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(headless=True, args=["--no-sandbox"])
             
             # Setup context with desktop dimensions by default
             context = browser.new_context(
