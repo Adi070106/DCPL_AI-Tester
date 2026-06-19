@@ -175,6 +175,10 @@ app.include_router(jobs.router)
 app.include_router(audits.router)
 app.include_router(reports.router)
 
+@app.get("/debug/cors")
+def debug_cors():
+    return {"CORS_ORIGINS": CORS_ORIGINS}
+
 @app.get("/")
 def read_root():
     return {"message": "Website QA & Audit SaaS API is running."}
