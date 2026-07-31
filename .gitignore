@@ -30,3 +30,6 @@ Thumbs.db
 # Temp
 _replace_urls.py
 .agents/
+
+# Handover PDFs containing sensitive info
+*.pdf
