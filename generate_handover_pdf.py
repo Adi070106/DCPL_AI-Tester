@@ -341,17 +341,16 @@ def generate_pdf():
     
     # Credentials Table
     headers = [Paragraph("Role", table_header_style), Paragraph("Login Email", table_header_style), Paragraph("Password", table_header_style)]
-    row_tester = [Paragraph("Tester (Read/Write)", table_cell_style), Paragraph("aditya.gunjal@dimakhconsultants.com", table_cell_style), Paragraph("password123", table_cell_style)]
     row_developer = [Paragraph("Developer (Read-Only)", table_cell_style), Paragraph("developer@dimakhconsultants.com", table_cell_style), Paragraph("password123", table_cell_style)]
     
-    creds_table = Table([headers, row_tester, row_developer], colWidths=[120, 260, 120])
+    creds_table = Table([headers, row_developer], colWidths=[120, 260, 120])
     creds_table.setStyle(TableStyle([
         ('BACKGROUND', (0,0), (-1,0), colors.HexColor("#1e1b4b")),
         ('ALIGN', (0,0), (-1,-1), 'LEFT'),
         ('BOTTOMPADDING', (0,0), (-1,0), 8),
         ('TOPPADDING', (0,0), (-1,0), 8),
         ('GRID', (0,0), (-1,-1), 0.5, colors.HexColor("#cbd5e1")),
-        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white, colors.HexColor("#f8fafc")]),
+        ('ROWBACKGROUNDS', (0,1), (-1,-1), [colors.white]),
         ('BOTTOMPADDING', (0,1), (-1,-1), 6),
         ('TOPPADDING', (0,1), (-1,-1), 6),
     ]))
