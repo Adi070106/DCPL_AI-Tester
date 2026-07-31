@@ -234,7 +234,13 @@ def generate_pdf():
     story.append(Paragraph("&bull; <b>Backend API</b>: FastAPI (Python), SQLAlchemy (ORM), SQLite (database), Uvicorn (ASGI web server).", bullet_style))
     story.append(Paragraph("&bull; <b>Auditing Engine</b>: Playwright Python API running headless Chrome instances to crawl websites, capture screenshots, and perform technical checks.", bullet_style))
     story.append(Paragraph("&bull; <b>PDF Generation</b>: ReportLab template generators for offline Client and Developer PDF report compilation.", bullet_style))
-    
+    story.append(Spacer(1, 10))
+    story.append(Paragraph("Git Repository Details:", h2_style))
+    story.append(Paragraph(
+        "<b>Repository URL:</b> https://github.com/Adi070106/DCPL_AI-Tester.git<br/>"
+        "<b>Primary Branch:</b> main",
+        body_style
+    ))
     story.append(Spacer(1, 10))
     story.append(Paragraph("Directory Structure Overview:", h2_style))
     story.append(Paragraph(
