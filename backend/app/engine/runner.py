@@ -31,7 +31,7 @@ from app.engine.auditors import (
 
 logger = logging.getLogger(__name__)
 
-def calculate_health_scores(findings_list: list, total_pages: int = 1, selected_categories: list = None) -> dict:
+def calculate_health_scores(findings_list: list, total_pages: int = 1, selected_categories: list = None, seed_url: str = None) -> dict:
     """Calculate 0-100 scores for categories and overall health."""
     categories = {
         "seo": 100.0,
@@ -46,17 +46,22 @@ def calculate_health_scores(findings_list: list, total_pages: int = 1, selected_
         "footer": 100.0,
     }
     
-    # Check if page failed to load entirely
-    page_load_failed = any(f.get("issue_code") == "TECH_PAGE_LOAD_FAILED" for f in findings_list)
+    # Check if the homepage (seed page) failed to load entirely
+    page_load_failed = False
+    if seed_url:
+        normalized_seed = seed_url.rstrip('/')
+        page_load_failed = any(
+            f.get("issue_code") == "TECH_PAGE_LOAD_FAILED" and f.get("page_url", "").rstrip('/') == normalized_seed
+            for f in findings_list
+        )
+    else:
+        page_load_failed = any(f.get("issue_code") == "TECH_PAGE_LOAD_FAILED" for f in findings_list)
     
     if page_load_failed:
-        # If the page failed to load, set all categories (except navigation) to -1 (N/A)
-        # Navigation gets 0 because it's a critical navigation failure
+        # If the seed page failed to load entirely, ALL categories are N/A (-1)
+        # because no audit data could be collected — a score of 0 would be misleading
         for cat in categories:
-            if cat == "navigation":
-                categories[cat] = 0
-            else:
-                categories[cat] = -1
+            categories[cat] = -1
         categories["overall"] = -1
         return categories
 
@@ -673,7 +678,7 @@ def execute_audit(job_id: int):
                 all_raw_findings.append(sf)
             
         # 4. Calculate Scores
-        scores = calculate_health_scores(all_raw_findings, total_pages, selected)
+        scores = calculate_health_scores(all_raw_findings, total_pages, selected, job.website_url)
         if homepage_psi_score is not None:
             scores["performance"] = homepage_psi_score
             active_scores = [v for k, v in scores.items() if k != "overall" and v >= 0]

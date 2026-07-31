@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter, useParams, useSearchParams } from "next/navigation";
 import axios from "axios";
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, LineChart, Line, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from "recharts";
@@ -112,6 +112,7 @@ export default function AuditDetailPage() {
   const [theme, setTheme] = useState("dark");
   const [mapLayout, setMapLayout] = useState("radial"); // radial or horizontal
   const [compareRuns, setCompareRuns] = useState([]);
+  const compareRunsFetchedRef = useRef(false); // prevents infinite polling loop
   const [compareTargetJobId, setCompareTargetJobId] = useState("");
   const [comparisonData, setComparisonData] = useState(null);
   const [loadingComparison, setLoadingComparison] = useState(false);
@@ -427,23 +428,28 @@ export default function AuditDetailPage() {
   };
 
   useEffect(() => {
-    if (activeTab === "compare" && audit?.job?.website_url && compareRuns.length === 0) {
-      const token = localStorage.getItem("token");
-      axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/jobs/trends?url=${encodeURIComponent(audit.job.website_url)}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      .then(res => {
-        // Filter out current job
-        const others = res.data.filter(run => run.job_id !== Number(jobId));
-        setCompareRuns(others);
-      })
-      .catch(err => {
-        if (err.response?.status !== 401) {
-          console.error("Failed to load other runs for comparison:", err.message || err);
-        }
-      });
+    if (activeTab !== "compare") {
+      compareRunsFetchedRef.current = false; // reset when leaving tab so it re-fetches on return
+      return;
     }
-  }, [activeTab, audit, jobId, compareRuns]);
+    if (compareRunsFetchedRef.current || !audit?.job?.website_url) return;
+    compareRunsFetchedRef.current = true;
+    const token = localStorage.getItem("token");
+    axios.get(`${process.env.NEXT_PUBLIC_API_URL}/api/jobs/trends?url=${encodeURIComponent(audit.job.website_url)}`, {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    .then(res => {
+      // Filter out current job
+      const others = res.data.filter(run => run.job_id !== Number(jobId));
+      setCompareRuns(others);
+    })
+    .catch(err => {
+      compareRunsFetchedRef.current = false; // allow retry on error
+      if (err.response?.status !== 401) {
+        console.error("Failed to load other runs for comparison:", err.message || err);
+      }
+    });
+  }, [activeTab, audit, jobId]);
 
   useEffect(() => {
     if (compareTargetJobId) {
@@ -562,16 +568,17 @@ export default function AuditDetailPage() {
       localLevelGroups[lvl].push(url);
     });
 
-    const centerX = 500;
-    const centerY = 350;
-
     if (mapLayout === "radial") {
-      localNodeMap[seedUrl] = { url: seedUrl, x: centerX, y: centerY, label: "/", level: 0 };
+      // --- CLEAN RADIAL LAYOUT ---
+      // Canvas: 1400 x 1000. Center of radial is the middle.
+      const cX = 700;
+      const cY = 500;
+      localNodeMap[seedUrl] = { url: seedUrl, x: cX, y: cY, label: "/", level: 0 };
       computedNodes.push(localNodeMap[seedUrl]);
 
       const maxLevel = Math.max(...Object.values(localLevels).map(Number), 1);
-      const maxAllowedRadius = 240;
-      const baseRadius = maxLevel > 0 ? maxAllowedRadius / maxLevel : 120;
+      // Each ring gets at least 130px of breathing room
+      const ringSpacing = Math.max(130, Math.min(200, 600 / maxLevel));
 
       Object.keys(localLevelGroups).forEach(lvlStr => {
         const lvl = Number(lvlStr);
@@ -579,59 +586,54 @@ export default function AuditDetailPage() {
 
         const levelUrls = localLevelGroups[lvl];
         const numNodes = levelUrls.length;
-        const radius = lvl * baseRadius;
+        const radius = lvl * ringSpacing;
+        // Slight rotation per ring to prevent radial spokes overlapping
+        const rotationOffset = (lvl % 2 === 0 ? 0 : Math.PI / numNodes);
 
         levelUrls.forEach((url, index) => {
-          const angle = (index / numNodes) * 2 * Math.PI + (lvl * 0.25);
-          const x = centerX + radius * Math.cos(angle);
-          const y = centerY + radius * Math.sin(angle);
-
-          localNodeMap[url] = {
-            url,
-            x,
-            y,
-            label: getUrlPath(url),
-            level: lvl
-          };
+          const angle = (index / numNodes) * 2 * Math.PI + rotationOffset;
+          const x = cX + radius * Math.cos(angle);
+          const y = cY + radius * Math.sin(angle);
+          localNodeMap[url] = { url, x, y, label: getUrlPath(url), level: lvl };
           computedNodes.push(localNodeMap[url]);
         });
       });
     } else {
-      // Build a map of children for each node in the BFS tree
+      // --- CLEAN HORIZONTAL TREE LAYOUT ---
+      // Canvas: 1600 x dynamic height. Nodes laid out left-to-right by BFS level.
       const childrenMap = {};
-      allScannedPages.forEach(url => {
-        childrenMap[url] = [];
-      });
+      allScannedPages.forEach(url => { childrenMap[url] = []; });
       allScannedPages.forEach(url => {
         const parent = localParentMap[url];
-        if (parent && childrenMap[parent]) {
-          childrenMap[parent].push(url);
-        }
+        if (parent && childrenMap[parent]) childrenMap[parent].push(url);
       });
 
-      // Identify and order the leaf nodes using a depth-first traversal
+      // DFS to get a stable leaf order for Y-positioning
       const leafOrder = [];
+      const visited = new Set();
       function traverse(url) {
-        const children = childrenMap[url] || [];
+        if (visited.has(url)) return;
+        visited.add(url);
+        const children = [...(childrenMap[url] || [])].sort((a, b) => a.localeCompare(b));
         if (children.length === 0) {
           leafOrder.push(url);
         } else {
-          const sortedChildren = [...children].sort((a, b) => a.localeCompare(b));
-          sortedChildren.forEach(child => traverse(child));
+          children.forEach(child => traverse(child));
         }
       }
       traverse(seedUrl);
-
+      // Add any orphaned nodes not reachable from seed
       allScannedPages.forEach(url => {
-        if (!leafOrder.includes(url) && (childrenMap[url] || []).length === 0) {
-          leafOrder.push(url);
-        }
+        if (!visited.has(url)) leafOrder.push(url);
       });
 
-      const totalLeaves = leafOrder.length;
+      const NODE_VERT_SPACING = 36; // px between nodes vertically
+      const totalLeaves = Math.max(1, leafOrder.length);
+      const canvasHeight = Math.max(700, totalLeaves * NODE_VERT_SPACING + 80);
+
       const leafYMap = {};
       leafOrder.forEach((url, idx) => {
-        leafYMap[url] = 60 + (idx + 0.5) * (580 / Math.max(1, totalLeaves));
+        leafYMap[url] = 60 + idx * NODE_VERT_SPACING;
       });
 
       const computedY = {};
@@ -639,27 +641,21 @@ export default function AuditDetailPage() {
         if (computedY[url] !== undefined) return computedY[url];
         const children = childrenMap[url] || [];
         if (children.length === 0) {
-          computedY[url] = leafYMap[url];
+          computedY[url] = leafYMap[url] ?? (canvasHeight / 2);
         } else {
           const childYs = children.map(c => getOrComputeY(c));
-          computedY[url] = childYs.reduce((sum, val) => sum + val, 0) / children.length;
+          computedY[url] = childYs.reduce((s, v) => s + v, 0) / children.length;
         }
         return computedY[url];
       }
-
-      allScannedPages.forEach(url => {
-        getOrComputeY(url);
-      });
+      allScannedPages.forEach(url => getOrComputeY(url));
 
       const maxLevel = Math.max(...Object.values(localLevels).map(Number), 1);
-      const levelWidth = maxLevel > 0 ? 800 / maxLevel : 200;
+      const LEVEL_X_SPACING = Math.max(160, Math.min(280, 1300 / maxLevel));
 
       localNodeMap[seedUrl] = {
-        url: seedUrl,
-        x: 100,
-        y: computedY[seedUrl],
-        label: "/",
-        level: 0
+        url: seedUrl, x: 80, y: getOrComputeY(seedUrl) || canvasHeight / 2,
+        label: "/", level: 0
       };
       computedNodes.push(localNodeMap[seedUrl]);
 
@@ -668,8 +664,8 @@ export default function AuditDetailPage() {
         const lvl = localLevels[url] || 1;
         localNodeMap[url] = {
           url,
-          x: 100 + lvl * levelWidth,
-          y: computedY[url],
+          x: 80 + lvl * LEVEL_X_SPACING,
+          y: getOrComputeY(url),
           label: getUrlPath(url),
           level: lvl
         };
@@ -678,7 +674,7 @@ export default function AuditDetailPage() {
     }
 
     setGraphNodes(computedNodes);
-    setPhysicsTicks(80);
+    setPhysicsTicks(0); // Disable physics — layouts are deterministic and clean
   }, [audit, mapLayout, activeTab]);
 
   // Physics tick simulation running in animation frame loop
@@ -887,164 +883,12 @@ export default function AuditDetailPage() {
   // Group client key recommendations
   const clientKeyIssues = audit.findings.filter((f) => f.severity === "CRITICAL" || f.severity === "HIGH");
 
-  if (allScannedPages.length > 0) {
-    const centerX = 500;
-    const centerY = 350;
-    const levels = {};
-    levels[seedUrl] = 0;
-
-    let queue = [seedUrl];
-    while (queue.length > 0) {
-      const current = queue.shift();
-      const currentLevel = levels[current];
-      const children = crawlRelations
-        .filter(([parent, child]) => parent === current)
-        .map(([parent, child]) => child);
-
-      children.forEach(child => {
-        if (levels[child] === undefined) {
-          levels[child] = currentLevel + 1;
-          parentMap[child] = current;
-          queue.push(child);
-        }
-      });
-    }
-
-    allScannedPages.forEach(url => {
-      if (levels[url] === undefined) {
-        levels[url] = 1;
-      }
-    });
-
-    levelGroups = {};
-    allScannedPages.forEach(url => {
-      const lvl = levels[url];
-      if (!levelGroups[lvl]) {
-        levelGroups[lvl] = [];
-      }
-      levelGroups[lvl].push(url);
-    });
-
-    if (mapLayout === "radial") {
-      nodeMap[seedUrl] = { url: seedUrl, x: centerX, y: centerY, label: "/", level: 0 };
-      nodes.push(nodeMap[seedUrl]);
-
-      const maxLevel = Math.max(...Object.values(levels).map(Number), 1);
-      const maxAllowedRadius = 240;
-      const baseRadius = maxLevel > 0 ? maxAllowedRadius / maxLevel : 120;
-
-      Object.keys(levelGroups).forEach(lvlStr => {
-        const lvl = Number(lvlStr);
-        if (lvl === 0) return;
-
-        const levelUrls = levelGroups[lvl];
-        const numNodes = levelUrls.length;
-        const radius = lvl * baseRadius;
-
-        levelUrls.forEach((url, index) => {
-          const angle = (index / numNodes) * 2 * Math.PI + (lvl * 0.25);
-          const x = centerX + radius * Math.cos(angle);
-          const y = centerY + radius * Math.sin(angle);
-
-          nodeMap[url] = {
-            url,
-            x,
-            y,
-            label: getUrlPath(url),
-            level: lvl
-          };
-          nodes.push(nodeMap[url]);
-        });
-      });
-    } else {
-      // 1. Build a map of children for each node in the BFS tree
-      const childrenMap = {};
-      allScannedPages.forEach(url => {
-        childrenMap[url] = [];
-      });
-      allScannedPages.forEach(url => {
-        const parent = parentMap[url];
-        if (parent && childrenMap[parent]) {
-          childrenMap[parent].push(url);
-        }
-      });
-
-      // 2. Identify and order the leaf nodes using a depth-first traversal to keep parent/child adjacent
-      const leafOrder = [];
-      function traverse(url) {
-        const children = childrenMap[url] || [];
-        if (children.length === 0) {
-          leafOrder.push(url);
-        } else {
-          const sortedChildren = [...children].sort((a, b) => a.localeCompare(b));
-          sortedChildren.forEach(child => traverse(child));
-        }
-      }
-      traverse(seedUrl);
-
-      // Fallback for any unvisited nodes
-      allScannedPages.forEach(url => {
-        if (!leafOrder.includes(url) && (childrenMap[url] || []).length === 0) {
-          leafOrder.push(url);
-        }
-      });
-
-      // 3. Assign leaf nodes vertical positions evenly spaced across height (60px to 640px)
-      const totalLeaves = leafOrder.length;
-      const leafYMap = {};
-      leafOrder.forEach((url, idx) => {
-        leafYMap[url] = 60 + (idx + 0.5) * (580 / Math.max(1, totalLeaves));
-      });
-
-      // 4. Compute Y coordinates for parent nodes bottom-up (average of their children's positions)
-      const computedY = {};
-      function getOrComputeY(url) {
-        if (computedY[url] !== undefined) return computedY[url];
-        const children = childrenMap[url] || [];
-        if (children.length === 0) {
-          computedY[url] = leafYMap[url];
-        } else {
-          const childYs = children.map(c => getOrComputeY(c));
-          computedY[url] = childYs.reduce((sum, val) => sum + val, 0) / children.length;
-        }
-        return computedY[url];
-      }
-
-      allScannedPages.forEach(url => {
-        getOrComputeY(url);
-      });
-
-      // 5. Assign X coordinates based on level and build final nodes array
-      const maxLevel = Math.max(...Object.values(levels).map(Number), 1);
-      const levelWidth = maxLevel > 0 ? 800 / maxLevel : 200;
-
-      // Seed URL node
-      nodeMap[seedUrl] = {
-        url: seedUrl,
-        x: 100,
-        y: computedY[seedUrl],
-        label: "/",
-        level: 0
-      };
-      nodes.push(nodeMap[seedUrl]);
-
-      // All other nodes
-      allScannedPages.forEach(url => {
-        if (url === seedUrl) return;
-        const lvl = levels[url] || 1;
-        nodeMap[url] = {
-          url,
-          x: 100 + lvl * levelWidth,
-          y: computedY[url],
-          label: getUrlPath(url),
-          level: lvl
-        };
-        nodes.push(nodeMap[url]);
-      });
-    }
-  }
-
-  const maxNodesInAnyLevel = allScannedPages.length > 0 && levelGroups ? Math.max(...Object.values(levelGroups).map(arr => arr.length), 1) : 1;
+  // Derive node size from the graphNodes state (set by useEffect)
+  const maxNodesInAnyLevel = graphNodes.length > 0
+    ? Math.max(...Object.values(
+        graphNodes.reduce((acc, n) => { acc[n.level] = (acc[n.level] || 0) + 1; return acc; }, {})
+      ), 1)
+    : 1;
   const dynamicNodeRadius = maxNodesInAnyLevel > 20 ? Math.max(5, Math.floor(180 / maxNodesInAnyLevel)) : 9;
   const rootRadius = dynamicNodeRadius + 6;
   const selectedRadius = dynamicNodeRadius + 3;
@@ -2004,8 +1848,8 @@ export default function AuditDetailPage() {
                     </div>
 
                     <svg
-                      className="w-full max-w-[1000px] h-[700px] shrink-0 select-none bg-slate-950/40 rounded-xl"
-                      viewBox="0 0 1000 700"
+                      className="w-full h-auto shrink-0 select-none bg-slate-950/40 rounded-xl"
+                      viewBox={mapLayout === "radial" ? "0 0 1400 1000" : `0 0 1600 ${Math.max(700, (graphNodes.length * 36) + 80)}`}
                       onMouseDown={handleGraphMouseDown}
                       onMouseMove={handleGraphMouseMove}
                       onMouseUp={handleGraphMouseUp}
